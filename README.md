@@ -1,4 +1,4 @@
-# attiny85-sk9812-i2c
+# attiny85-sk6812-i2c
 
 make attiny85 a I2C slave which control NeoPixel strips up to 32 LEDs<br>
 Freqency: 16MHz, Pins: 0 - SDA, 1 - LED data, 2 - SCL, 3 - strip Power<br>
