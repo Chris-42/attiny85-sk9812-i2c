@@ -10,8 +10,8 @@ based on https://github.com/rambo/TinyWire,
 #include <Adafruit_NeoPixel.h>
 
 #define DEFAULT_I2C_SLAVE_ADDRESS 0x20 // the 7-bit address (remember to change this when adapting this example)
-#define LED_PIN 1
-#define POWER_PIN 3
+#define LED_PIN 3
+#define POWER_PIN 4
 #define MAX_LED_COUNT 32
 #define DEFAULT_LED_TYPE NEO_GRBW + NEO_KHZ800
 
@@ -63,6 +63,7 @@ typedef enum {
   CMD_SET_ALL_COLOR      =  9, // rgbw
   CMD_SET_INIT_COLOR     = 10, // rgbw
   CMD_POWER_CTL          = 11, // on/off (1/0)
+  CMD_RESET              = 12, //
 } command_t;
 
 uint8_t cmd_arg_len[] = {
@@ -78,13 +79,14 @@ uint8_t cmd_arg_len[] = {
   4, //CMD_SET_ALL_COLOR
   4, //CMD_SET_INIT_COLOR
   1, //CMD_POWER_CTL 
-  0,
+  0, // CMD_RESET
 };
 
 #define EE_MAGIC 42
 
 bool show_strip = false;
 bool clear_strip = false;
+uint8_t knight = 0;
 uint8_t led_idx = 255;
 bool copy_all = false;
 volatile led_32_t master_led;
@@ -123,6 +125,7 @@ void receiveEvent(uint8_t count) {
   led_32_t pix;
   uint8_t x;
   count--;
+  
   if (!count) {
     // This write was only to set the buffer for next read
     // prepare send buffer because requestEvent get called after first transfer
@@ -131,7 +134,7 @@ void receiveEvent(uint8_t count) {
       sub_led_reg_pos = 0;
     }
     TinyWireS.flushBuffer();
-    TinyWireS.send(sub_led_regs[reg++]);
+    TinyWireS.send(sub_led_regs[sub_led_reg_pos++]);
     if (sub_led_reg_pos >= reg_size) {
       sub_led_reg_pos = 0;
     }
@@ -212,12 +215,15 @@ void receiveEvent(uint8_t count) {
         x = TinyWireS.receive();
         if(x) {
           digitalWrite(POWER_PIN, LOW);
+          show_strip = true;
         } else {
           digitalWrite(POWER_PIN, HIGH);
         }
         break;
-      case 12:
+      case CMD_RESET:
         TinyWireS.send(freeRam());
+        wdt_enable(WDTO_60MS);
+        while(true);
         break;
     }
   } else { // we got a write to led buffer
@@ -238,6 +244,7 @@ void receiveEvent(uint8_t count) {
 void setup() {
   pinMode(POWER_PIN, OUTPUT);
   digitalWrite(POWER_PIN, LOW);
+  delayMicroseconds(1);
   clock_prescale_set(clock_div_1);
   wdt_enable(WDTO_1S);
   EEPROM.begin();
@@ -303,9 +310,9 @@ void loop() {
     digitalWrite(4, HIGH);
   }
 
-  if((ti - last_run) >= 1000L) {
+  if((ti - last_run) >= 100L) {
     last_run = ti;
-    // do something every second
+    // do something every 1/10 second
   }
   wdt_reset();
 }

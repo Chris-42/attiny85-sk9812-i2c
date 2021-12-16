@@ -605,7 +605,6 @@ ISR( USI_OVERFLOW_VECTOR )
   // not the transaction is completely finished.
   finished = 0;
 
-
   switch ( overflowState )
   {
 
@@ -657,6 +656,11 @@ ISR( USI_OVERFLOW_VECTOR )
       if ( txCount )
       {
         USIDR = txBuf[ txTail ];
+        DDR_USI |= ( 1 << PORT_USI_SDA );
+        asm volatile("nop");
+        asm volatile("nop");
+        asm volatile("nop");
+        asm volatile("nop");
         txTail = ( txTail + 1 ) & TWI_TX_BUFFER_MASK;
         txCount--;
 
@@ -738,7 +742,6 @@ ISR( USI_OVERFLOW_VECTOR )
     // note that this allows sleep -- it does not cause sleep
     MCUCR |= sleep_enable_bit;
   }
-
   // no need to restore the SREG. The compiler does this automatically when using the
   // ISR construct without modifying attributes.
 
