@@ -3,10 +3,10 @@ turn attiny85 in I2C slave to control sk6812 LED strip with up to 32 LEDs
 based on https://github.com/rambo/TinyWire, 
  */
 
-
 #include <EEPROM.h>
 #include <avr/wdt.h>
 #include <avr/power.h>
+#include <avr/sleep.h>
 #include <Adafruit_NeoPixel.h>
 
 #define DEFAULT_I2C_SLAVE_ADDRESS 0x20 // the 7-bit address (remember to change this when adapting this example)
@@ -64,6 +64,8 @@ typedef enum {
   CMD_SET_INIT_COLOR     = 10, // rgbw
   CMD_POWER_CTL          = 11, // on/off (1/0)
   CMD_RESET              = 12, //
+  CMD_CLEAR_SHOW         = 13,
+  CMD_RAINBOW            = 14, //
 } command_t;
 
 uint8_t cmd_arg_len[] = {
@@ -80,13 +82,13 @@ uint8_t cmd_arg_len[] = {
   4, //CMD_SET_INIT_COLOR
   1, //CMD_POWER_CTL 
   0, // CMD_RESET
+  0, // Rainbow
+  0, //CMD_CLEAR_SHOW
 };
 
 #define EE_MAGIC 42
 
 bool show_strip = false;
-bool clear_strip = false;
-uint8_t knight = 0;
 uint8_t led_idx = 255;
 bool copy_all = false;
 volatile led_32_t master_led;
@@ -155,7 +157,7 @@ void receiveEvent(uint8_t count) {
         show_strip = true;
         break;
       case CMD_CLEAR:
-        clear_strip = true;
+        strip->clear();
         break;
       case CMD_COPY_ALL_IDX:
         led_idx = TinyWireS.receive();
@@ -183,7 +185,7 @@ void receiveEvent(uint8_t count) {
         break;
       case CMD_LED_TYPE:
         led_type = (uint16_t)TinyWireS.receive() << 8;
-        led_idx |= TinyWireS.receive();
+        led_type |= TinyWireS.receive();
         save_preferences = true;
         break;
       case CMD_SET_INIT_COLOR:
@@ -215,6 +217,7 @@ void receiveEvent(uint8_t count) {
         x = TinyWireS.receive();
         if(x) {
           digitalWrite(POWER_PIN, LOW);
+          delay(200);
           show_strip = true;
         } else {
           digitalWrite(POWER_PIN, HIGH);
@@ -224,6 +227,14 @@ void receiveEvent(uint8_t count) {
         TinyWireS.send(freeRam());
         wdt_enable(WDTO_60MS);
         while(true);
+        break;
+      case CMD_CLEAR_SHOW:
+        strip->clear();
+        show_strip = true;
+        break;
+      case CMD_RAINBOW:
+        strip->rainbow();
+        show_strip = true;
         break;
     }
   } else { // we got a write to led buffer
@@ -242,16 +253,22 @@ void receiveEvent(uint8_t count) {
 }
 
 void setup() {
+  //uint8_t q = MCUSR;
+  //MCUSR = 0;
   pinMode(POWER_PIN, OUTPUT);
   digitalWrite(POWER_PIN, LOW);
   delayMicroseconds(1);
   clock_prescale_set(clock_div_1);
-  wdt_enable(WDTO_1S);
+  //wdt_disable();
+  wdt_enable(WDTO_2S);
+  set_sleep_mode(SLEEP_MODE_IDLE);
+  //set_sleep_mode(SLEEP_MODE_PWR_DOWN);
+  sleep_enable(); 
+  ADCSRA = 0;            // ADC ausschalten
   EEPROM.begin();
   if(EEPROM.read(0) == 42) {
     i2c_address = EEPROM.read(1);
-    led_type = EEPROM.read(2);
-    led_type <<=8;
+    led_type = (uint16_t)EEPROM.read(2) << 8;
     led_type |= EEPROM.read(3);
     led_count = EEPROM.read(4);
     master_led.rgb.r = EEPROM.read(5);
@@ -267,6 +284,8 @@ void setup() {
   for(uint8_t i = 0; i < led_count; i++) {
     strip->setPixelColor(i, master_led.col);
   }
+  //strip->setPixelColor(0, q, 1, 0, 0);
+  delay(200);
   strip->show();
 
   TinyWireS.begin(i2c_address);
@@ -280,25 +299,17 @@ uint32_t last_run = 0;
 
 void loop() {
   uint32_t ti = millis();
-  if(show_strip) {
-    show_strip = false;
-    strip->show();
-  } else if(clear_strip) {
-    clear_strip = false;
-    for(int i = 0; i < led_count; i++) {
-      strip->clear();
-    }
-  } else if(copy_all) {
+  if(copy_all) {
     copy_all = false;
     strip->fill(strip->getPixelColor(led_idx), 0, led_count);
-  } else if(save_preferences) {
+  }
+  if(save_preferences) {
     save_preferences = false;
-    digitalWrite(4, LOW);
     EEPROM.begin();
     EEPROM.write(0, EE_MAGIC);
     EEPROM.write(1, i2c_address);
-    EEPROM.write(2, led_type>>8);
-    EEPROM.write(3, led_type & 0x0f);
+    EEPROM.write(2, led_type >> 8);
+    EEPROM.write(3, led_type & 0xff);
     EEPROM.write(4, led_count);
     EEPROM.write(5, master_led.rgb.r);
     EEPROM.write(6, master_led.rgb.g);
@@ -307,12 +318,18 @@ void loop() {
     EEPROM.end();
     wdt_enable(WDTO_60MS);
     while(true);
-    digitalWrite(4, HIGH);
+  }
+  if(show_strip) {
+    show_strip = false;
+    strip->show();
   }
 
   if((ti - last_run) >= 100L) {
     last_run = ti;
     // do something every 1/10 second
+    // but maybe then sleep has to be disabled?
   }
+
+  sleep_mode();
   wdt_reset();
 }
