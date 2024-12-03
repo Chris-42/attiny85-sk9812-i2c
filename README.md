@@ -7,6 +7,9 @@ Address is initial 0x20, but can be changed by command<br>
 <br>
 I2C register 0 is command<br>
 I2C register 1 - n are mapped direct to NeoPixel LED buffer which is in case of SK9812 g/r/b/w * num_led structure<br>
+I2C register 80 - Reset<br>
+I2C register 82 - get Timonel Version<br>
+I2C register 86 - jump to Timonel<br>
 <br>
 a command consists of one or more bytes written to I2C register 0<br>
 Commands:<br>
@@ -21,7 +24,7 @@ Commands:<br>
 <li>8 idx r g b w: set the led on idx to color
 <li>9 r g b w: set all leds to color
 <li>10 r g b w: set poweron start color for all leds to color
-<li>11 on: control powerport (pin 3) 0->off else on (port is inverted to direct control FET
+<li>11 on: control powerport (pin 3) 0->off else on (port is inverted to direct control FET)
 <li>12: restart
 </ul>
 to read led buffer first the starting address has to be written, then read is done<br>
