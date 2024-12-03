@@ -59,10 +59,10 @@ void USI_TWI_S::onRequest( void (*function)(void) )
   usi_onRequestPtr = function;
 }
 
-void USI_TWI_S::flushBuffer() {
-  flushTwiBuffers();
-}
+void USI_TWI_S::flushTxBuffer() {
+  usiTwiFlushTxBuffer();
 
+}
 // This routine is no longer used now that the usiTwiSlave is completely
 // interrupt driven. The function is maintained here so that programs
 // written for the pre-interrupt driven version will still compile and function.
@@ -92,4 +92,3 @@ void tws_delay(unsigned long ms)
 // Preinstantiate Objects //////////////////////////////////////////////////////
 
 USI_TWI_S TinyWireS = USI_TWI_S();
-

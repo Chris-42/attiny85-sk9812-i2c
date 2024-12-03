@@ -43,7 +43,7 @@ Change Activity:
 /********************************************************************************
                                     includes
 ********************************************************************************/
-
+#include <Arduino.h>
 #include <avr/io.h>
 #include <avr/interrupt.h>
 
@@ -320,7 +320,7 @@ static volatile uint8_t txCount;
 
 // flushes the TWI buffers
 
-void flushTwiBuffers( void )
+static void flushTwiBuffers( void )
 {
   rxTail = 0;
   rxHead = 0;
@@ -337,6 +337,13 @@ void flushTwiBuffers( void )
                                 public functions
 
 ********************************************************************************/
+void usiTwiFlushTxBuffer( void )
+{
+  txTail = 0;
+  txHead = 0;
+  txCount = 0;
+} // end flushTwiBuffers
+
 
 // initialise USI for TWI slave mode
 
@@ -490,11 +497,17 @@ ISR( USI_START_VECTOR )
   // Condition as in Application Note AVR312 because the Stop Condition Flag is
   // going to be set from the last TWI sequence
 
+  /*
+  we are not fast enough entering here because on addr > 0x3f SDA is already on high again
   // while SCL is high and SDA is low
   while  ( ( usi_pins = PIN_USI & USI_PINS_SCL_SDA ) == USI_PINS_SCL );
 
   // if SDA line was low at SCL edge, then start condition occurred
   if ( !( usi_pins & USI_PINS_SDA ) )
+  */
+  // if SCL is low in this point then the start may be valid
+  usi_pins = PIN_USI & USI_PINS_SCL_SDA;
+  if ( !( usi_pins & USI_PINS_SCL ) )
   {
     // a Stop Condition did not occur
     
@@ -605,6 +618,7 @@ ISR( USI_OVERFLOW_VECTOR )
   // not the transaction is completely finished.
   finished = 0;
 
+
   switch ( overflowState )
   {
 
@@ -615,6 +629,9 @@ ISR( USI_OVERFLOW_VECTOR )
       {
         if ( USIDR & 0x01 )
         {
+          if(!txCount) {
+            USI_REQUEST_CALLBACK();
+          }
           overflowState = USI_SLAVE_SEND_DATA;
         }
         else
@@ -656,11 +673,6 @@ ISR( USI_OVERFLOW_VECTOR )
       if ( txCount )
       {
         USIDR = txBuf[ txTail ];
-        DDR_USI |= ( 1 << PORT_USI_SDA );
-        asm volatile("nop");
-        asm volatile("nop");
-        asm volatile("nop");
-        asm volatile("nop");
         txTail = ( txTail + 1 ) & TWI_TX_BUFFER_MASK;
         txCount--;
 
@@ -742,6 +754,7 @@ ISR( USI_OVERFLOW_VECTOR )
     // note that this allows sleep -- it does not cause sleep
     MCUCR |= sleep_enable_bit;
   }
+
   // no need to restore the SREG. The compiler does this automatically when using the
   // ISR construct without modifying attributes.
 

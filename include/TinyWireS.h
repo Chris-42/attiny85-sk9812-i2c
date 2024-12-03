@@ -52,7 +52,7 @@ class USI_TWI_S
     uint8_t receive();
     void onReceive( void (*)(uint8_t) );
     void onRequest( void (*)(void) );
-    void flushBuffer();
+    void flushTxBuffer();
 };
 
 void TinyWireS_stop_check();
@@ -62,4 +62,3 @@ void tws_delay(unsigned long);
 extern USI_TWI_S TinyWireS;
 
 #endif
-

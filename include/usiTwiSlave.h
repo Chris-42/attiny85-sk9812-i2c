@@ -52,7 +52,7 @@ Change Activity:
                                    prototypes
 
 ********************************************************************************/
-
+void    usiTwiFlushTxBuffer();
 void    usiTwiSlaveInit( uint8_t );
 void    usiTwiTransmitByte( uint8_t );
 uint8_t usiTwiReceiveByte( void );
@@ -61,7 +61,6 @@ uint8_t usiTwiAmountDataInReceiveBuffer(void);
 // on_XXX handler pointers
 void    (*usi_onRequestPtr)(void);
 void    (*usi_onReceiverPtr)(uint8_t);
-void    flushTwiBuffers( void );
 
 
 /********************************************************************************
