@@ -1,7 +1,7 @@
 # attiny85-sk6812-i2c
 
 make attiny85 a I2C slave which control NeoPixel strips up to 32 LEDs<br>
-Freqency: 16MHz, Pins: 0 - SDA, 1 - LED data, 2 - SCL, 3 - strip Power<br>
+Freqency: 8MHz, Pins: 0 - SDA, 3 - LED data, 2 - SCL, 4 - strip Power<br>
 I2C on Raspi 3.3V is working well even if the attiny85 is powered from 5V<br>
 Address is initial 0x20, but can be changed by command<br>
 <br>

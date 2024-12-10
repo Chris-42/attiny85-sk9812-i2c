@@ -10,7 +10,7 @@ based on https://github.com/rambo/TinyWire,
 #include <avr/io.h>
 #include <Adafruit_NeoPixel.h>
 
-#define DEFAULT_I2C_SLAVE_ADDRESS 0x20 // the 7-bit address (remember to change this when adapting this example)
+#define DEFAULT_I2C_SLAVE_ADDRESS 0x1F // the 7-bit address (remember to change this when adapting this example)
 #define LED_PIN 3
 #define POWER_PIN 4
 #define MAX_LED_COUNT 32
@@ -50,8 +50,8 @@ uint8_t i2c_address = DEFAULT_I2C_SLAVE_ADDRESS;
 // Tracks the current register
 volatile uint8_t current_reg = 0;
 // Tracks the current register pointer position
-volatile byte sub_led_reg_pos;
-uint8_t *sub_led_regs;
+volatile byte reg_pos;
+uint8_t *led_regs;
 uint8_t reg_size = 0;
 
 typedef enum {
@@ -110,22 +110,27 @@ int freeRam () {
  */
 void requestEvent() {  
   if(current_reg == 0x82) {
-    TinyWireS.send(timonel_buf[sub_led_reg_pos]);
-    //TinyWireS.send('Q');
-    sub_led_reg_pos++;
-    if(sub_led_reg_pos >= 12) {
-      sub_led_reg_pos = 0;
+    TinyWireS.send(timonel_buf[reg_pos]);
+    reg_pos++;
+    if(reg_pos >= 12) {
+      reg_pos = 0;
     }
     return;
   } else if(current_reg == 0x80) { // reset
     wdt_enable(WDTO_60MS);
+    return;
   } else if(current_reg == 0x86) { // jump to bootloader
     ((void (*)(void))0)();
   }
-  TinyWireS.send(sub_led_regs[sub_led_reg_pos++]);
+  TinyWireS.send(led_regs[(current_reg - 1) * reg_size + reg_pos]);
   // Increment the reg position on each read, and loop back to zero
-  if (sub_led_reg_pos >= reg_size) {
-    sub_led_reg_pos = 0;
+  reg_pos++;
+  if (reg_pos >= reg_size) {
+    reg_pos = 0;
+    current_reg++;
+    if(current_reg > led_count) {
+      current_reg = 0;
+    }
   }
 }
 
@@ -146,26 +151,24 @@ void receiveEvent(uint8_t count) {
   uint8_t x;
   count--;
   
+  reg_pos = 0;
   if (!count) {
-      // Timonel special
+    TinyWireS.flushTxBuffer();
+    // Timonel special
     if(current_reg == 0x80) { // RESETMCU
       TinyWireS.send(0x7F); // RESETACK
     } else if(current_reg == 0x82) { // GETTMNLV Command Get our Version
       TinyWireS.send(0x7D); // ACKTMNLV
-      TinyWireS.send(APP_MAGIC); // in our case L instead of T
+      reg_pos++;
+      //TinyWireS.send(APP_MAGIC); // in our case L instead of T
     } else if(current_reg == 0x86) { // EXITTMNL in our case we enter the bootloader
       TinyWireS.send(0x79); // ACKEXITT
-    }
-    // This write was only to set the buffer for next read
-    // prepare send buffer because requestEvent get called after first transfer
-    sub_led_reg_pos = current_reg;
-    if(sub_led_reg_pos >= led_count) {
-      sub_led_reg_pos = 0;
-    }
-    TinyWireS.flushTxBuffer();
-    TinyWireS.send(sub_led_regs[sub_led_reg_pos++]);
-    if (sub_led_reg_pos >= reg_size) {
-      sub_led_reg_pos = 0;
+    } else {
+      // This write was only to set the buffer for next read
+      // prepare send buffer because requestEvent get called after first transfer
+      if(current_reg > led_count) {
+        current_reg = 1;
+      }
     }
     return;
   }
@@ -265,15 +268,18 @@ void receiveEvent(uint8_t count) {
         break;
     }
   } else { // we got a write to led buffer
-    if((current_reg < 1) || (current_reg > reg_size)) {
+    if((current_reg < 1) || (current_reg > led_count)) {
       return;
     }
-    sub_led_reg_pos = current_reg - 1;
     while(count--) {
-      sub_led_regs[sub_led_reg_pos] = TinyWireS.receive();
-      sub_led_reg_pos++;
-      if (sub_led_reg_pos >= reg_size) {
-        sub_led_reg_pos = 0;
+      led_regs[(current_reg - 1) * reg_size + reg_pos] = TinyWireS.receive();
+      reg_pos++;
+      if (reg_pos >= reg_size) {
+        reg_pos = 0;
+        current_reg++;
+        if(current_reg > led_count) {
+          current_reg = 1;
+        }
       }
     }
   }
@@ -294,7 +300,7 @@ void setup() {
   ADCSRA = 0;            // ADC ausschalten
   //EEPROM.begin();
   EEPROM.update(0, APP_MAGIC);
-  if(EEPROM.read(1) == 42) {
+  if(EEPROM.read(1) == EE_MAGIC) {
     i2c_address = EEPROM.read(2);
     led_type = (uint16_t)EEPROM.read(3) << 8;
     led_type |= EEPROM.read(4);
@@ -307,8 +313,8 @@ void setup() {
   //EEPROM.end();
   strip = new myNeoPixel(led_count, LED_PIN, led_type);
   strip->begin();
-  sub_led_regs = strip->getPixels();
-  reg_size = strip->PixelBytes();
+  led_regs = strip->getPixels();
+  reg_size = strip->BytePerPixel();
   for(uint8_t i = 0; i < led_count; i++) {
     strip->setPixelColor(i, master_led.col);
   }
